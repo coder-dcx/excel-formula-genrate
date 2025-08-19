@@ -1,576 +1,529 @@
 import React, { useState } from 'react';
+import './App.css';
 import {
-  Paper,
+  Box,
   Typography,
+  Grid,
+  Paper,
+  CardContent,
+  CardHeader,
+  Button,
+  TextField,
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
-  Button,
-  TextField,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Grid,
-  Chip,
-  Box,
-  Card,
-  CardContent,
-  CardHeader,
   IconButton,
-  Divider
+  makeStyles,
 } from '@material-ui/core';
 import {
-  ExpandMore as ExpandMoreIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
-  Refresh as RefreshIcon,
-  Functions as FunctionsIcon,
-  Code as CodeIcon
+  ExpandMore as ExpandMoreIcon,
 } from '@material-ui/icons';
-import { makeStyles } from '@material-ui/core/styles';
-import './App.css';
-
-const _cellValueList = ['cell value 1', 'cell value 2', 'cell value 3', 'cell value 4'];
-const _OperatorList = ['+', '-', '*', '/'];
-const _ConditionList = ['==', '>=', '<=', '<>'];
-const _FunctionList = ['cellValue', 'number', 'textbox', 'operator', 'if', 'lookup'];
+import { TreeView, TreeItem } from '@material-ui/lab';
 
 const useStyles = makeStyles((theme) => ({
   root: {
-    maxWidth: 1200,
-    margin: '0 auto',
-    padding: theme.spacing(2),
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     minHeight: '100vh',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    padding: theme.spacing(2),
   },
   container: {
-    backgroundColor: 'white',
-    borderRadius: theme.spacing(1),
-    padding: theme.spacing(3),
-    margin: theme.spacing(1, 0),
+    maxWidth: 1400,
+    margin: '0 auto',
   },
   header: {
     textAlign: 'center',
-    marginBottom: theme.spacing(3),
-    paddingBottom: theme.spacing(2),
-    borderBottom: `2px solid ${theme.palette.divider}`,
-  },
-  formulaSection: {
-    marginBottom: theme.spacing(2),
-  },
-  nodeContainer: {
-    padding: theme.spacing(1.5),
-    marginBottom: theme.spacing(1),
-    border: `2px solid ${theme.palette.divider}`,
-    borderRadius: theme.spacing(1),
-    backgroundColor: 'white',
-  },
-  operatorChip: {
-    margin: theme.spacing(0.5),
+    marginBottom: theme.spacing(4),
+    '& h3': {
+      fontWeight: 'bold',
+      textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+    }
   },
   previewSection: {
-    marginTop: theme.spacing(2),
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    boxShadow: '0 8px 32px rgba(31, 38, 135, 0.37)',
   },
   codeBlock: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1e1e1e',
+    color: '#d4d4d4',
     padding: theme.spacing(2),
-    borderRadius: theme.spacing(1),
-    fontFamily: 'Courier New, monospace',
+    borderRadius: 8,
+    fontFamily: 'Consolas, Monaco, monospace',
     fontSize: '12px',
-    whiteSpace: 'pre-wrap',
-    wordWrap: 'break-word',
-    maxHeight: 300,
     overflow: 'auto',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+  },
+  treeRoot: {
+    backgroundColor: '#263238',
+    borderRadius: 12,
+    padding: theme.spacing(2),
+    color: '#ffffff',
+    '& .MuiTreeItem-root': {
+      '& .MuiTreeItem-content': {
+        padding: theme.spacing(0.5, 1),
+        borderRadius: 6,
+        margin: theme.spacing(0.25, 0),
+        backgroundColor: 'transparent',
+        '&:hover': {
+          backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        },
+        '& .MuiTreeItem-label': {
+          fontSize: '14px',
+          fontWeight: 500,
+        },
+      },
+      '& .MuiTreeItem-group': {
+        marginLeft: theme.spacing(1.5),
+        paddingLeft: theme.spacing(1.5),
+        borderLeft: '1px solid rgba(255, 255, 255, 0.12)',
+      },
+    },
+  },
+  treeItemOperator: {
+    '& .MuiTreeItem-label': {
+      color: '#81c784 !important',
+    },
+  },
+  treeItemFunction: {
+    '& .MuiTreeItem-label': {
+      color: '#ffb74d !important',
+    },
+  },
+  treeItemCondition: {
+    '& .MuiTreeItem-label': {
+      color: '#f06292 !important',
+    },
+  },
+  treeItemValue: {
+    '& .MuiTreeItem-label': {
+      color: '#64b5f6 !important',
+    },
   },
 }));
 
-const Collapsible = ({ label, children }) => {
-  const [expanded, setExpanded] = useState(true);
-  
-  return (
-    <Accordion expanded={expanded} onChange={() => setExpanded(!expanded)}>
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Typography variant="body2" component="div">
-          {label}
-        </Typography>
-      </AccordionSummary>
-      <AccordionDetails>
-        <Box width="100%">
-          {children}
-        </Box>
-      </AccordionDetails>
-    </Accordion>
-  );
-};
+const _cellValueList = ['A1', 'B1', 'C1', 'A2', 'B2', 'C2', 'A3', 'B3', 'C3'];
+const _OperatorList = ['+', '-', '*', '/', '%', '&'];
+const _ConditionList = ['=', '>', '<', '>=', '<=', '<>'];
+const _FunctionList = ['lookup', 'sum', 'average', 'max', 'min'];
 
-const FormulaNode = ({ node, onChange }) => {
-  const classes = useStyles();
-  
-  // Determine type key for dropdown (function:lookup -> lookup)
-  const selectedType =
-    node.type === 'function' && node.name === 'lookup' ? 'lookup' : node.type;
+const SimpleFormulaNode = ({ node, onChange, classes, path }) => {
+  if (!node) return null;
 
-  const changeType = (e) => {
-    const type = e.target.value;
-    switch (type) {
+  const renderValueEditor = (node, onChange) => {
+    switch (node.type) {
       case 'cellValue':
-        onChange({ type: 'cellValue', value: _cellValueList[0] });
-        break;
-      case 'number':
-        onChange({ type: 'number', value: 0 });
-        break;
-      case 'textbox':
-        onChange({ type: 'textbox', value: '' });
-        break;
-      case 'operator':
-        onChange({
-          type: 'operator',
-          operators: ['+'], // Array of operators between arguments
-          args: [{ type: 'number', value: 0 }, { type: 'number', value: 0 }],
-        });
-        break;
-      case 'if':
-        onChange({
-          type: 'if',
-          condition: {
-            operator: '==',
-            left: { type: 'cellValue', value: _cellValueList[0] },
-            right: { type: 'number', value: 0 },
-          },
-          trueValue: { type: 'number', value: 0 },
-          falseValue: { type: 'number', value: 0 },
-        });
-        break;
-      case 'lookup':
-        onChange({
-          type: 'function',
-          name: 'lookup',
-          args: [
-            { type: 'cellValue', value: _cellValueList[0] },
-            { type: 'cellValue', value: 'STRUC_HRS' },
-            { type: 'cellValue', value: _cellValueList[1] },
-          ],
-        });
-        break;
-      default:
-        break;
-    }
-  };
-
-  const resetNode = () => changeType({ target: { value: selectedType } });
-
-  const renderTypeControl = () => (
-    <Box display="flex" alignItems="center" gap={1} mb={1}>
-      <FormControl size="small" style={{ minWidth: 120 }}>
-        <InputLabel>Type</InputLabel>
-        <Select
-          value={selectedType}
-          onChange={changeType}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {_FunctionList.map((f) => (
-            <MenuItem key={f} value={f}>
-              {f}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-      <Button
-        size="small"
-        variant="outlined"
-        startIcon={<RefreshIcon />}
-        onClick={(e) => {
-          e.stopPropagation();
-          resetNode();
-        }}
-      >
-        Reset
-      </Button>
-    </Box>
-  );
-
-  switch (node.type) {
-    case 'cellValue':
-      return (
-        <Paper className={classes.nodeContainer}>
-          {renderTypeControl()}
-          <FormControl fullWidth size="small">
-            <InputLabel>Select Cell Value</InputLabel>
+        return (
+          <FormControl size="small" style={{ minWidth: 120 }}>
             <Select
               value={node.value}
               onChange={(e) => onChange({ ...node, value: e.target.value })}
+              style={{ color: 'white', fontSize: '12px' }}
             >
               {_cellValueList.map((c) => (
-                <MenuItem key={c} value={c}>
-                  {c}
-                </MenuItem>
+                <MenuItem key={c} value={c}>{c}</MenuItem>
               ))}
             </Select>
           </FormControl>
-        </Paper>
-      );
-
-    case 'number':
-      return (
-        <Paper className={classes.nodeContainer}>
-          {renderTypeControl()}
+        );
+      
+      case 'number':
+        return (
           <TextField
-            fullWidth
             size="small"
-            label="Enter Number"
             type="number"
             value={node.value}
             onChange={(e) => onChange({ ...node, value: Number(e.target.value) })}
-            placeholder="Enter a number"
+            style={{ width: 80 }}
+            InputProps={{ style: { color: 'white', fontSize: '12px' } }}
           />
-        </Paper>
-      );
-
-    case 'textbox':
-      return (
-        <Paper className={classes.nodeContainer}>
-          {renderTypeControl()}
+        );
+      
+      case 'textbox':
+        return (
           <TextField
-            fullWidth
             size="small"
-            label="Enter Text"
             type="text"
             value={node.value}
             onChange={(e) => onChange({ ...node, value: e.target.value })}
-            placeholder="Enter text value"
+            style={{ width: 120 }}
+            InputProps={{ style: { color: 'white', fontSize: '12px' } }}
           />
-        </Paper>
-      );
+        );
+      
+      case 'function':
+        return (
+          <FormControl size="small" style={{ minWidth: 120 }}>
+            <Select
+              value={node.name || 'lookup'}
+              onChange={(e) => onChange({ ...node, name: e.target.value })}
+              style={{ color: 'white', fontSize: '12px' }}
+            >
+              {_FunctionList.map((f) => (
+                <MenuItem key={f} value={f}>{f.toUpperCase()}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        );
+      
+      case 'if':
+        return (
+          <Typography variant="body2" style={{ color: '#f06292' }}>
+            🔀 IF Condition
+          </Typography>
+        );
+      
+      default:
+        return <Typography variant="body2" style={{ color: 'white' }}>{node.value || 'N/A'}</Typography>;
+    }
+  };
 
-    case 'operator':
-      return (
-        <Collapsible
-          label={
-            <Box display="flex" alignItems="center" onClick={(e) => e.stopPropagation()}>
-              {renderTypeControl()}
-              <Box display="flex" alignItems="center" ml={1}>
-                <FunctionsIcon color="primary" />
-                <Typography variant="body2" color="primary" style={{ fontWeight: 'bold', marginLeft: 8 }}>
-                  Operator: {node.operators ? node.operators.join(' ') : node.operator || '+'}
-                </Typography>
-              </Box>
-            </Box>
+  const renderTypeSelector = (node, onChange) => (
+    <FormControl size="small" style={{ minWidth: 100, marginRight: 8 }}>
+      <Select
+        value={node.type}
+        onChange={(e) => {
+          const newType = e.target.value;
+          let newNode = { type: newType };
+          
+          switch (newType) {
+            case 'number':
+              newNode.value = 0;
+              break;
+            case 'cellValue':
+              newNode.value = 'A1';
+              break;
+            case 'textbox':
+              newNode.value = '';
+              break;
+            case 'operator':
+              newNode.operators = ['+'];
+              newNode.args = [{ type: 'number', value: 0 }, { type: 'number', value: 0 }];
+              break;
+            case 'if':
+              newNode.condition = {
+                left: { type: 'number', value: 0 },
+                operator: '=',
+                right: { type: 'number', value: 0 }
+              };
+              newNode.trueValue = { type: 'number', value: 1 };
+              newNode.falseValue = { type: 'number', value: 0 };
+              break;
+            case 'function':
+              newNode.name = 'lookup';
+              newNode.args = [{ type: 'cellValue', value: 'A1' }];
+              break;
           }
-        >
-          <Box>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6" color="primary">
-                📋 Arguments & Operators
-              </Typography>
-              <Button
-                size="small"
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  const newArgs = [...(node.args || []), { type: 'number', value: 0 }];
-                  const newOperators = [...(node.operators || [node.operator] || ['+']), '+'];
-                  onChange({
-                    ...node,
-                    args: newArgs,
-                    operators: newOperators,
-                  });
+          
+          onChange(newNode);
+        }}
+        style={{ color: 'white', fontSize: '12px' }}
+      >
+        <MenuItem value="number">🔢 Number</MenuItem>
+        <MenuItem value="cellValue">📊 Cell</MenuItem>
+        <MenuItem value="textbox">📝 Text</MenuItem>
+        <MenuItem value="operator">⚙️ Operator</MenuItem>
+        <MenuItem value="if">🔀 IF</MenuItem>
+        <MenuItem value="function">🔍 Function</MenuItem>
+      </Select>
+    </FormControl>
+  );
+
+  if (node.type === 'operator' && node.args) {
+    return (
+      <TreeItem
+        nodeId={`${path}-operator`}
+        label={
+          <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+            {renderTypeSelector(node, onChange)}
+            <Typography variant="body2">⚙️ Operation</Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                const newArgs = [...node.args, { type: 'number', value: 0 }];
+                const newOperators = [...(node.operators || ['+'])];
+                if (newOperators.length < newArgs.length - 1) {
+                  newOperators.push('+');
+                }
+                onChange({ ...node, args: newArgs, operators: newOperators });
+              }}
+              style={{ color: '#4fc3f7', borderColor: '#4fc3f7', marginLeft: 8 }}
+            >
+              + Add Arg
+            </Button>
+          </Box>
+        }
+        className={classes.treeItemOperator}
+      >
+        {node.args.map((arg, index) => (
+          <React.Fragment key={index}>
+            <TreeItem
+              nodeId={`${path}-arg-${index}`}
+              label={
+                <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+                  <Typography variant="body2">Arg {index + 1}:</Typography>
+                  {node.args.length > 2 && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newArgs = node.args.filter((_, i) => i !== index);
+                        const newOperators = (node.operators || []).filter((_, i) => i !== index || i === 0);
+                        onChange({ ...node, args: newArgs, operators: newOperators.length > 0 ? newOperators : ['+'] });
+                      }}
+                      style={{ color: '#f48fb1' }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Box>
+              }
+              className={classes.treeItemValue}
+            >
+              <SimpleFormulaNode
+                node={arg}
+                onChange={(newArg) => {
+                  const newArgs = [...node.args];
+                  newArgs[index] = newArg;
+                  onChange({ ...node, args: newArgs });
                 }}
-              >
-                Add Argument
-              </Button>
-            </Box>
-            
-            {(node.args || []).map((arg, i) => (
-              <Box key={i} mb={2}>
-                {/* Argument */}
-                <Paper className={classes.nodeContainer}>
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                    <Typography variant="body2" style={{ fontWeight: 'bold', color: '#6c757d' }}>
-                      Argument {i + 1}
-                    </Typography>
-                    {(node.args || []).length > 2 && (
-                      <IconButton
-                        size="small"
-                        color="secondary"
-                        onClick={() => {
-                          const newArgs = node.args.filter((_, idx) => idx !== i);
-                          const newOperators = (node.operators || []).filter((_, idx) => idx !== i || idx === 0);
-                          onChange({ 
-                            ...node, 
-                            args: newArgs,
-                            operators: newOperators.length > 0 ? newOperators : ['+']
-                          });
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                  </Box>
-                  <FormulaNode
-                    node={arg}
-                    onChange={(val) => {
-                      const newArgs = [...node.args];
-                      newArgs[i] = val;
-                      onChange({ ...node, args: newArgs });
-                    }}
-                  />
-                </Paper>
-                
-                {/* Operator after this argument (except for the last argument) */}
-                {i < (node.args || []).length - 1 && (
-                  <Box display="flex" justifyContent="center" my={1}>
-                    <FormControl size="small" style={{ minWidth: 150 }}>
-                      <InputLabel>Operator</InputLabel>
+                classes={classes}
+                path={`${path}-arg-${index}`}
+              />
+            </TreeItem>
+            {index < node.args.length - 1 && (
+              <TreeItem
+                nodeId={`${path}-op-${index}`}
+                label={
+                  <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+                    <Typography variant="body2">Operator:</Typography>
+                    <FormControl size="small" style={{ minWidth: 80 }}>
                       <Select
-                        value={(node.operators || [node.operator] || ['+'])[i] || '+'}
+                        value={(node.operators || ['+'])[index] || '+'}
                         onChange={(e) => {
-                          const newOperators = [...(node.operators || [node.operator] || ['+'])];
-                          newOperators[i] = e.target.value;
-                          onChange({ 
-                            ...node, 
-                            operators: newOperators,
-                            operator: undefined // Remove old single operator property
-                          });
+                          const newOperators = [...(node.operators || ['+'])];
+                          newOperators[index] = e.target.value;
+                          onChange({ ...node, operators: newOperators });
                         }}
+                        style={{ color: 'white', fontSize: '12px' }}
                       >
                         {_OperatorList.map((op) => (
-                          <MenuItem key={op} value={op}>
-                            {op} ({op === '+' ? 'Add' : op === '-' ? 'Subtract' : op === '*' ? 'Multiply' : 'Divide'})
-                          </MenuItem>
+                          <MenuItem key={op} value={op}>{op}</MenuItem>
                         ))}
                       </Select>
                     </FormControl>
                   </Box>
-                )}
-              </Box>
-            ))}
+                }
+                className={classes.treeItemOperator}
+              />
+            )}
+          </React.Fragment>
+        ))}
+      </TreeItem>
+    );
+  }
+
+  // Handle IF condition type
+  if (node.type === 'if') {
+    return (
+      <TreeItem
+        nodeId={`${path}-if`}
+        label={
+          <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+            {renderTypeSelector(node, onChange)}
+            <Typography variant="body2">🔀 IF Condition</Typography>
           </Box>
-        </Collapsible>
-      );
-
-    case 'if':
-      return (
-        <Collapsible
-          label={
-            <div onClick={(e) => e.stopPropagation()}>
-              {renderTypeControl()} 
-              <span style={{ marginLeft: '10px', color: '#0066cc', fontWeight: 'bold' }}>
-                🔀 IF Condition
-              </span>
-            </div>
-          }
+        }
+        className={classes.treeItemFunction}
+      >
+        <TreeItem
+          nodeId={`${path}-condition`}
+          label="🎯 Condition"
+          className={classes.treeItemOperator}
         >
-          <div className="form-group">
-            <h4 style={{ color: '#0066cc', marginBottom: '10px', fontSize: '14px' }}>🔍 Condition:</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '8px', alignItems: 'end', marginBottom: '15px' }}>
-              <div>
-                <label className="form-label">Left Side:</label>
-                <FormulaNode
-                  node={node.condition.left}
-                  onChange={(val) =>
-                    onChange({
-                      ...node,
-                      condition: { ...node.condition, left: val },
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <label className="form-label">Comparison:</label>
-                <select
-                  value={node.condition.operator}
-                  onChange={(e) =>
-                    onChange({
-                      ...node,
-                      condition: { ...node.condition, operator: e.target.value },
-                    })
-                  }
-                  className="form-control"
-                  style={{ minWidth: '70px' }}
-                >
-                  {_ConditionList.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Right Side:</label>
-                <FormulaNode
-                  node={node.condition.right}
-                  onChange={(val) =>
-                    onChange({
-                      ...node,
-                      condition: { ...node.condition, right: val },
-                    })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <h4 style={{ color: '#28a745', margin: 0, fontSize: '14px' }}>✅ True Value:</h4>
-              <button
-                className="btn btn-success btn-small"
-                onClick={() =>
-                  onChange({
-                    ...node,
-                    trueValue: { type: 'number', value: 0 },
-                  })
-                }
-              >
-                🔄 Reset to Simple
-              </button>
-            </div>
-            <FormulaNode
-              node={node.trueValue}
-              onChange={(val) => onChange({ ...node, trueValue: val })}
-            />
-          </div>
-
-          <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <h4 style={{ color: '#dc3545', margin: 0, fontSize: '14px' }}>❌ False Value:</h4>
-              <button
-                className="btn btn-danger btn-small"
-                onClick={() =>
-                  onChange({
-                    ...node,
-                    falseValue: { type: 'number', value: 0 },
-                  })
-                }
-              >
-                🔄 Reset to Simple
-              </button>
-            </div>
-            <FormulaNode
-              node={node.falseValue}
-              onChange={(val) => onChange({ ...node, falseValue: val })}
-            />
-          </div>
-        </Collapsible>
-      );
-
-    case 'function':
-      if (node.name === 'lookup') {
-        return (
-          <Collapsible
-            label={
-              <div onClick={(e) => e.stopPropagation()}>
-                {renderTypeControl()} 
-                <span style={{ marginLeft: '10px', color: '#0066cc', fontWeight: 'bold' }}>
-                  🔍 Function: LOOKUP
-                </span>
-              </div>
-            }
+          <TreeItem
+            nodeId={`${path}-condition-left`}
+            label="📍 Left Side"
+            className={classes.treeItemValue}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <h4 style={{ color: '#0066cc', margin: 0, fontSize: '14px' }}>📋 Function Arguments:</h4>
-              <button
-                className="btn btn-success btn-small"
-                onClick={() =>
-                  onChange({
-                    ...node,
-                    args: [...node.args, { type: 'number', value: 0 }],
-                  })
-                }
-              >
-                ➕ Add Argument
-              </button>
-            </div>
-            {node.args.map((arg, i) => (
-              <div key={i} className="node-container" style={{ marginBottom: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontWeight: 'bold', color: '#6c757d', fontSize: '12px' }}>
-                    Argument {i + 1} {i === 0 ? '(Lookup Value)' : i === 1 ? '(Lookup Array)' : i === 2 ? '(Result Array)' : ''}
-                  </span>
-                  <button
-                    className="btn btn-danger btn-small"
-                    onClick={() => {
-                      const newArgs = node.args.filter((_, idx) => idx !== i);
-                      onChange({ ...node, args: newArgs });
+            <SimpleFormulaNode
+              node={node.condition?.left || { type: 'number', value: 0 }}
+              onChange={(newVal) => {
+                onChange({
+                  ...node,
+                  condition: { ...node.condition, left: newVal }
+                });
+              }}
+              classes={classes}
+              path={`${path}-condition-left`}
+            />
+          </TreeItem>
+          <TreeItem
+            nodeId={`${path}-condition-op`}
+            label={
+              <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+                <Typography variant="body2">Operator:</Typography>
+                <FormControl size="small" style={{ minWidth: 80 }}>
+                  <Select
+                    value={node.condition?.operator || '='}
+                    onChange={(e) => {
+                      onChange({
+                        ...node,
+                        condition: { ...node.condition, operator: e.target.value }
+                      });
                     }}
+                    style={{ color: 'white', fontSize: '12px' }}
                   >
-                    🗑️ Remove
-                  </button>
-                </div>
-                <FormulaNode
-                  node={arg}
-                  onChange={(val) => {
-                    const newArgs = [...node.args];
-                    newArgs[i] = val;
+                    {_ConditionList.map((c) => (
+                      <MenuItem key={c} value={c}>{c}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            }
+            className={classes.treeItemOperator}
+          />
+          <TreeItem
+            nodeId={`${path}-condition-right`}
+            label="📍 Right Side"
+            className={classes.treeItemValue}
+          >
+            <SimpleFormulaNode
+              node={node.condition?.right || { type: 'number', value: 0 }}
+              onChange={(newVal) => {
+                onChange({
+                  ...node,
+                  condition: { ...node.condition, right: newVal }
+                });
+              }}
+              classes={classes}
+              path={`${path}-condition-right`}
+            />
+          </TreeItem>
+        </TreeItem>
+        <TreeItem
+          nodeId={`${path}-true`}
+          label="✅ True Value"
+          className={classes.treeItemValue}
+        >
+          <SimpleFormulaNode
+            node={node.trueValue || { type: 'number', value: 1 }}
+            onChange={(newVal) => {
+              onChange({ ...node, trueValue: newVal });
+            }}
+            classes={classes}
+            path={`${path}-true`}
+          />
+        </TreeItem>
+        <TreeItem
+          nodeId={`${path}-false`}
+          label="❌ False Value"
+          className={classes.treeItemValue}
+        >
+          <SimpleFormulaNode
+            node={node.falseValue || { type: 'number', value: 0 }}
+            onChange={(newVal) => {
+              onChange({ ...node, falseValue: newVal });
+            }}
+            classes={classes}
+            path={`${path}-false`}
+          />
+        </TreeItem>
+      </TreeItem>
+    );
+  }
+
+  // Handle Function type
+  if (node.type === 'function') {
+    return (
+      <TreeItem
+        nodeId={`${path}-function`}
+        label={
+          <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+            {renderTypeSelector(node, onChange)}
+            <Typography variant="body2">🔍 Function:</Typography>
+            {renderValueEditor(node, onChange)}
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                const newArgs = [...(node.args || []), { type: 'cellValue', value: 'A1' }];
+                onChange({ ...node, args: newArgs });
+              }}
+              style={{ color: '#4fc3f7', borderColor: '#4fc3f7', marginLeft: 8 }}
+            >
+              + Add Arg
+            </Button>
+          </Box>
+        }
+        className={classes.treeItemFunction}
+      >
+        {(node.args || []).map((arg, index) => (
+          <TreeItem
+            key={index}
+            nodeId={`${path}-func-arg-${index}`}
+            label={`📊 Argument ${index + 1}`}
+            className={classes.treeItemValue}
+          >
+            <SimpleFormulaNode
+              node={arg}
+              onChange={(newArg) => {
+                const newArgs = [...(node.args || [])];
+                newArgs[index] = newArg;
+                onChange({ ...node, args: newArgs });
+              }}
+              classes={classes}
+              path={`${path}-func-arg-${index}`}
+            />
+            {(node.args || []).length > 1 && (
+              <Box 
+                display="flex" 
+                alignItems="center" 
+                gap={1} 
+                style={{ marginTop: 8 }}
+                onClick={e => e.stopPropagation()}
+              >
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newArgs = (node.args || []).filter((_, i) => i !== index);
                     onChange({ ...node, args: newArgs });
                   }}
-                />
-              </div>
-            ))}
-          </Collapsible>
-        );
-      }
-      break;
-
-    default:
-      return <div>Unknown type</div>;
+                  startIcon={<DeleteIcon />}
+                >
+                  Remove Arg
+                </Button>
+              </Box>
+            )}
+          </TreeItem>
+        ))}
+      </TreeItem>
+    );
   }
+
+  // Simple leaf node
+  return (
+    <TreeItem
+      nodeId={`${path}-leaf`}
+      label={
+        <Box display="flex" alignItems="center" gap={1} onClick={e => e.stopPropagation()}>
+          {renderTypeSelector(node, onChange)}
+          {renderValueEditor(node, onChange)}
+        </Box>
+      }
+      className={classes.treeItemValue}
+    />
+  );
 };
 
-const generateExcelFormula = (node) => {
-  if (!node) return '';
-  switch (node.type) {
-    case 'cellValue':
-      return node.value;
-    case 'number':
-      return node.value.toString();
-    case 'textbox':
-      return `"${node.value}"`;
-    case 'operator':
-      // Handle new operators array format or legacy single operator
-      if (node.args && node.args.length > 0) {
-        if (node.operators && node.operators.length > 0) {
-          // New format: individual operators between arguments
-          let result = generateExcelFormula(node.args[0]);
-          for (let i = 1; i < node.args.length; i++) {
-            const operator = node.operators[i - 1] || '+';
-            result += operator + generateExcelFormula(node.args[i]);
-          }
-          return `(${result})`;
-        } else if (node.operator) {
-          // Legacy format: same operator for all
-          return `(${node.args.map(generateExcelFormula).join(node.operator)})`;
-        }
-      }
-      return '';
-    case 'if':
-      return `IF(${generateExcelFormula(node.condition.left)}${node.condition.operator}${generateExcelFormula(
-        node.condition.right
-      )},${generateExcelFormula(node.trueValue)},${generateExcelFormula(node.falseValue)})`;
-    case 'function':
-      if (node.name === 'lookup') {
-        return `LOOKUP(${node.args.map(generateExcelFormula).join(',')})`;
-      }
-      return '';
-    default:
-      return '';
-  }
-};
-
-const FormulaBuilder = () => {
-  const [formulas, setFormulas] = useState([
-    {
-      type: 'operator',
-      operators: ['+'],
-      args: [
-        { type: 'number', value: 0 },
-        { type: 'number', value: 0 },
-      ],
-    },
-  ]);
-
+const SimpleFormulaBuilder = ({ formulas, setFormulas, classes }) => {
   const updateFormulaAtIndex = (idx, newNode) => {
     const newFormulas = [...formulas];
     newFormulas[idx] = newNode;
@@ -594,62 +547,185 @@ const FormulaBuilder = () => {
   };
 
   return (
-    <div className="App">
-      <div className="formula-builder-container">
-        <div className="header">
-          <h1>🧮 Excel Formula Builder</h1>
-          <p>
-            Build complex Excel formulas visually using our intuitive interface. 
-            Create nested formulas, add conditions, and see real-time previews of your work.
-          </p>
-        </div>
+    <Box>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h5" color="primary">
+          🌳 Interactive Formula Builder
+        </Typography>
+        <Button 
+          onClick={addFormula} 
+          variant="contained" 
+          color="primary"
+          startIcon={<AddIcon />}
+        >
+          Add New Formula
+        </Button>
+      </Box>
 
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ color: '#0066cc', margin: 0, fontSize: '1.4rem' }}>📝 Formula Sections</h2>
-            <button onClick={addFormula} className="btn btn-success">
-              ➕ Add New Formula
-            </button>
-          </div>
-
-          {formulas.map((f, i) => (
-            <div key={i} className="formula-section">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h3 style={{ color: '#0066cc', margin: 0, fontSize: '1.1rem' }}>Formula {i + 1}</h3>
-                {formulas.length > 1 && (
-                  <button 
-                    onClick={() => removeFormula(i)} 
-                    className="btn btn-danger btn-small"
-                  >
-                    🗑️ Remove
-                  </button>
-                )}
-              </div>
-              <FormulaNode node={f} onChange={(val) => updateFormulaAtIndex(i, val)} />
-            </div>
+      <TreeView
+        className={classes.treeRoot}
+        defaultCollapseIcon={<ExpandMoreIcon />}
+        defaultExpandIcon={<ExpandMoreIcon style={{ transform: 'rotate(-90deg)' }} />}
+        defaultExpanded={['root']}
+        style={{ color: '#ffffff', height: 'auto', maxHeight: 600, overflow: 'auto' }}
+      >
+        <TreeItem
+          nodeId="root"
+          label={
+            <Typography variant="h6" style={{ fontWeight: 'bold', color: '#90caf9' }}>
+              📋 Excel Formulas ({formulas.length})
+            </Typography>
+          }
+          className={classes.treeItemFunction}
+        >
+          {formulas.map((formula, index) => (
+            <TreeItem
+              key={`formula-${index}`}
+              nodeId={`formula-${index}`}
+              label={
+                <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
+                  <Typography variant="body1" style={{ fontWeight: 'bold' }}>
+                    📋 Formula {index + 1}
+                  </Typography>
+                  {formulas.length > 1 && (
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFormula(index);
+                      }}
+                      style={{ color: '#f48fb1', padding: 2 }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Box>
+              }
+              className={classes.treeItemFunction}
+            >
+              <SimpleFormulaNode 
+                node={formula} 
+                onChange={(val) => updateFormulaAtIndex(index, val)} 
+                classes={classes}
+                path={`formula-${index}`}
+              />
+            </TreeItem>
           ))}
+        </TreeItem>
+      </TreeView>
+    </Box>
+  );
+};
+
+const generateExcelFormula = (node) => {
+  if (!node) return '';
+
+  switch (node.type) {
+    case 'number':
+      return node.value.toString();
+    case 'cellValue':
+      return node.value;
+    case 'textbox':
+      return `"${node.value}"`;
+    case 'operator':
+      if (node.args && node.args.length > 0) {
+        const formulas = node.args.map(generateExcelFormula);
+        const operators = node.operators || ['+'];
+        let result = formulas[0];
+        for (let i = 1; i < formulas.length; i++) {
+          result += (operators[i-1] || '+') + formulas[i];
+        }
+        return `(${result})`;
+      }
+      return '0';
+    case 'if':
+      const leftFormula = generateExcelFormula(node.condition?.left || { type: 'number', value: 0 });
+      const rightFormula = generateExcelFormula(node.condition?.right || { type: 'number', value: 0 });
+      const trueFormula = generateExcelFormula(node.trueValue || { type: 'number', value: 1 });
+      const falseFormula = generateExcelFormula(node.falseValue || { type: 'number', value: 0 });
+      const operator = node.condition?.operator || '=';
+      return `IF(${leftFormula}${operator}${rightFormula},${trueFormula},${falseFormula})`;
+    case 'function':
+      const funcName = (node.name || 'lookup').toUpperCase();
+      const funcArgs = (node.args || []).map(generateExcelFormula).join(',');
+      return `${funcName}(${funcArgs})`;
+    default:
+      return node.value?.toString() || '';
+  }
+};
+
+const FormulaBuilder = () => {
+  const classes = useStyles();
+  const [formulas, setFormulas] = useState([
+    {
+      type: 'operator',
+      operators: ['+'],
+      args: [
+        { type: 'number', value: 10 },
+        { type: 'number', value: 20 },
+      ],
+    },
+  ]);
+
+  return (
+    <div className={classes.root}>
+      <div className={classes.container}>
+        <div className={classes.header}>
+          <Typography variant="h3" color="primary" gutterBottom>
+            🧮 Excel Formula Builder
+          </Typography>
+          <Typography variant="body1" color="textSecondary">
+            Build complex Excel formulas using our interactive tree interface. 
+            Edit values directly in the tree structure and see real-time updates.
+          </Typography>
         </div>
 
-        <div className="preview-section">
-          <div className="preview-header">
-            📊 JSON Preview
-          </div>
-          <div className="preview-content">
-            <code>{JSON.stringify(formulas, null, 2)}</code>
-          </div>
-        </div>
+        <Grid container spacing={3}>
+          {/* Interactive Tree Editor - Main Section */}
+          <Grid item xs={12} lg={8}>
+            <SimpleFormulaBuilder 
+              formulas={formulas} 
+              setFormulas={setFormulas} 
+              classes={classes} 
+            />
+          </Grid>
 
-        <div className="preview-section">
-          <div className="preview-header">
-            📋 Excel Formula Output
-          </div>
-          <div className="preview-content">
-            <code>= {formulas.map(generateExcelFormula).join(' + ')}</code>
-            <div style={{ marginTop: '10px', padding: '8px', background: '#e7f3ff', borderRadius: '6px', border: '1px solid #b3d9ff' }}>
-              <strong>💡 Tip:</strong> Copy the formula above and paste it directly into Excel!
-            </div>
-          </div>
-        </div>
+          {/* Preview Section */}
+          <Grid item xs={12} lg={4}>
+            {/* JSON Preview */}
+            <Paper className={classes.previewSection} style={{ marginBottom: 16 }}>
+              <CardHeader 
+                title="📊 JSON Preview" 
+                style={{ backgroundColor: '#1976d2', color: 'white', fontSize: '14px' }}
+                titleTypographyProps={{ variant: 'h6' }}
+              />
+              <CardContent>
+                <div className={classes.codeBlock} style={{ maxHeight: 200 }}>
+                  {JSON.stringify(formulas, null, 2)}
+                </div>
+              </CardContent>
+            </Paper>
+
+            {/* Excel Formula Output */}
+            <Paper className={classes.previewSection}>
+              <CardHeader 
+                title="📋 Excel Formula" 
+                style={{ backgroundColor: '#1976d2', color: 'white' }}
+                titleTypographyProps={{ variant: 'h6' }}
+              />
+              <CardContent>
+                <div className={classes.codeBlock} style={{ maxHeight: 150 }}>
+                  = {formulas.map(generateExcelFormula).join(' + ')}
+                </div>
+                <Box mt={2} p={1.5} style={{ backgroundColor: '#e3f2fd', borderRadius: 8, border: '1px solid #bbdefb' }}>
+                  <Typography variant="body2">
+                    <strong>💡 Tip:</strong> Copy the formula and paste into Excel!
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Paper>
+          </Grid>
+        </Grid>
       </div>
     </div>
   );
