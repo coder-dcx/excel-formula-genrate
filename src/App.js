@@ -105,7 +105,7 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-const _cellValueList = ['A1', 'B1', 'C1', 'A2', 'B2', 'C2', 'A3', 'B3', 'C3'];
+const _cellValueList = ['A1', 'B1', 'C1', 'A2', 'B2', 'C2', 'A3', 'B3', 'C3', 'A1:A5', 'B1:B5', 'C1:C5', 'A1:C1', 'A2:C2'];
 const _OperatorList = ['+', '-', '*', '/', '%', '&'];
 const _ConditionList = ['=', '>', '<', '>=', '<=', '<>'];
 const _FunctionList = ['lookup', 'sum', 'average', 'max', 'min'];
@@ -654,6 +654,153 @@ const generateExcelFormula = (node) => {
   }
 };
 
+// Excel Formula Parser/Decoder
+const parseExcelFormula = (formula) => {
+  try {
+    // Remove leading = if present and trim
+    formula = formula.trim().replace(/^=/, '');
+    
+    // Handle IF functions with better regex
+    const ifMatch = formula.match(/^IF\s*\(\s*(.+?)\s*([>=<]+|<>)\s*(.+?)\s*,\s*(.+?)\s*,\s*(.+?)\s*\)$/i);
+    if (ifMatch) {
+      const [, left, operator, right, trueVal, falseVal] = ifMatch;
+      return {
+        type: 'if',
+        condition: {
+          left: parseExcelFormula(left.trim()),
+          operator: operator.trim(),
+          right: parseExcelFormula(right.trim())
+        },
+        trueValue: parseExcelFormula(trueVal.trim()),
+        falseValue: parseExcelFormula(falseVal.trim())
+      };
+    }
+    
+    // Handle Functions with range support (A1:A5)
+    const funcMatch = formula.match(/^(SUM|MAX|MIN|AVERAGE|LOOKUP)\s*\(\s*(.+?)\s*\)$/i);
+    if (funcMatch) {
+      const [, funcName, argsStr] = funcMatch;
+      
+      // Split arguments more carefully, considering nested functions
+      const args = [];
+      let currentArg = '';
+      let parenCount = 0;
+      
+      for (let i = 0; i < argsStr.length; i++) {
+        const char = argsStr[i];
+        if (char === '(') parenCount++;
+        else if (char === ')') parenCount--;
+        else if (char === ',' && parenCount === 0) {
+          args.push(parseExcelFormula(currentArg.trim()));
+          currentArg = '';
+          continue;
+        }
+        currentArg += char;
+      }
+      if (currentArg.trim()) {
+        args.push(parseExcelFormula(currentArg.trim()));
+      }
+      
+      return {
+        type: 'function',
+        name: funcName.toLowerCase(),
+        args: args
+      };
+    }
+    
+    // Handle parentheses
+    if (formula.startsWith('(') && formula.endsWith(')')) {
+      formula = formula.slice(1, -1);
+    }
+    
+    // Handle operators with precedence awareness
+    const operators = ['+', '-', '*', '/', '%', '&'];
+    for (const op of operators) {
+      const parts = [];
+      let currentPart = '';
+      let parenCount = 0;
+      
+      for (let i = 0; i < formula.length; i++) {
+        const char = formula[i];
+        if (char === '(') parenCount++;
+        else if (char === ')') parenCount--;
+        else if (char === op && parenCount === 0) {
+          parts.push(currentPart.trim());
+          parts.push(op);
+          currentPart = '';
+          continue;
+        }
+        currentPart += char;
+      }
+      if (currentPart.trim()) parts.push(currentPart.trim());
+      
+      if (parts.length > 1) {
+        const args = [];
+        const ops = [];
+        
+        for (let i = 0; i < parts.length; i++) {
+          if (i % 2 === 0) {
+            args.push(parseExcelFormula(parts[i]));
+          } else {
+            ops.push(parts[i]);
+          }
+        }
+        
+        return {
+          type: 'operator',
+          operators: ops,
+          args: args
+        };
+      }
+    }
+    
+    // Handle cell ranges (A1:A5) - convert to cell reference for simplicity
+    if (/^[A-Z]+\d+:[A-Z]+\d+$/i.test(formula)) {
+      return {
+        type: 'cellValue',
+        value: formula.toUpperCase()
+      };
+    }
+    
+    // Handle cell references (A1, B2, etc.)
+    if (/^[A-Z]+\d+$/i.test(formula)) {
+      return {
+        type: 'cellValue',
+        value: formula.toUpperCase()
+      };
+    }
+    
+    // Handle text strings
+    if (formula.startsWith('"') && formula.endsWith('"')) {
+      return {
+        type: 'textbox',
+        value: formula.slice(1, -1)
+      };
+    }
+    
+    // Handle numbers
+    if (!isNaN(formula) && !isNaN(parseFloat(formula))) {
+      return {
+        type: 'number',
+        value: parseFloat(formula)
+      };
+    }
+    
+    // Default fallback for unknown patterns
+    return {
+      type: 'textbox',
+      value: formula
+    };
+    
+  } catch (error) {
+    console.error('Error parsing formula:', error);
+    return {
+      type: 'textbox',
+      value: formula
+    };
+  }
+};
+
 const FormulaBuilder = () => {
   const classes = useStyles();
   const [formulas, setFormulas] = useState([
@@ -666,19 +813,93 @@ const FormulaBuilder = () => {
       ],
     },
   ]);
+  
+  const [inputFormula, setInputFormula] = useState('');
+
+  const handleDecodeFormula = () => {
+    if (inputFormula.trim()) {
+      try {
+        const decoded = parseExcelFormula(inputFormula);
+        setFormulas([decoded]);
+      } catch (error) {
+        alert('Error decoding formula. Please check the syntax.');
+      }
+    }
+  };
 
   return (
     <div className={classes.root}>
       <div className={classes.container}>
         <div className={classes.header}>
           <Typography variant="h3" color="primary" gutterBottom>
-            🧮 Excel Formula Builder
+            🧮 Excel Formula Builder & Decoder
           </Typography>
           <Typography variant="body1" color="textSecondary">
-            Build complex Excel formulas using our interactive tree interface. 
+            Build complex Excel formulas using our interactive tree interface, or decode existing formulas. 
             Edit values directly in the tree structure and see real-time updates.
           </Typography>
         </div>
+
+        {/* Formula Decoder Section */}
+        <Paper className={classes.previewSection} style={{ marginBottom: 24 }}>
+          <CardHeader 
+            title="🔍 Excel Formula Decoder" 
+            style={{ backgroundColor: '#388e3c', color: 'white' }}
+            titleTypographyProps={{ variant: 'h6' }}
+          />
+          <CardContent>
+            <Box display="flex" gap={2} alignItems="center" mb={2}>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Enter Excel formula (e.g., =IF(A1>B1,SUM(C1:C5),MAX(D1:D5))"
+                value={inputFormula}
+                onChange={(e) => setInputFormula(e.target.value)}
+                InputProps={{
+                  style: { fontFamily: 'Consolas, Monaco, monospace' }
+                }}
+              />
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleDecodeFormula}
+                disabled={!inputFormula.trim()}
+                style={{ minWidth: 120 }}
+              >
+                🔄 Decode
+              </Button>
+            </Box>
+            <Typography variant="body2" color="textSecondary">
+              <strong>💡 Supported:</strong> IF conditions, Functions (SUM, MAX, MIN, AVERAGE, LOOKUP), 
+              Operators (+, -, *, /, %), Cell references (A1, B2), Numbers, and Text strings
+            </Typography>
+            
+            {/* Quick Examples */}
+            <Box mt={2}>
+              <Typography variant="body2" style={{ fontWeight: 'bold', marginBottom: 8 }}>
+                🚀 Quick Examples:
+              </Typography>
+              <Box display="flex" gap={1} flexWrap="wrap">
+                {[
+                  '=IF(A1>B1,SUM(C1:C5),MAX(D1:D5))',
+                  '=(A1+B1)*C1',
+                  '=SUM(A1,B1,C1)',
+                  '=IF(SUM(A1:A5)>100,"High","Low")'
+                ].map((example, idx) => (
+                  <Button
+                    key={idx}
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setInputFormula(example)}
+                    style={{ fontSize: '11px', textTransform: 'none' }}
+                  >
+                    {example}
+                  </Button>
+                ))}
+              </Box>
+            </Box>
+          </CardContent>
+        </Paper>
 
         <Grid container spacing={3}>
           {/* Interactive Tree Editor - Main Section */}
